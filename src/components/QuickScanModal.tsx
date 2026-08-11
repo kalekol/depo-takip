@@ -2,7 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Product, PackageItem, StockLogItem, ScanActionType } from '../types';
 import { calculateCompleteSet } from '../lib/setCalculator';
 import { soundEffects } from '../lib/sound';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import {
+  startCameraStream,
+  scanBarcodeFromImageFile,
+  getCameraDevices,
+  CameraStreamControl,
+} from '../lib/barcodeScanner';
 import {
   X,
   Camera,
@@ -25,6 +30,8 @@ import {
   Zap,
   ZapOff,
   RefreshCw,
+  Lock,
+  Info,
 } from 'lucide-react';
 
 interface QuickScanModalProps {
@@ -73,6 +80,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
   const [targetSetQty, setTargetSetQty] = useState<string>('');
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isPermissionDenied, setIsPermissionDenied] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
@@ -94,10 +102,8 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
   const [inlineQtyInput, setInlineQtyInput] = useState<string>('');
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
-  const isTransitioningRef = useRef<boolean>(false);
-  const lastScannedBarcodeRef = useRef<string>('');
-  const lastScannedTimeRef = useRef<number>(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamControlRef = useRef<CameraStreamControl | null>(null);
 
   // Auto focus USB/Keyboard input when USB mode is active
   useEffect(() => {
@@ -119,7 +125,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         if (isMounted) {
           startCamera(selectedCameraId || undefined);
         }
-      }, 80);
+      }, 100);
     } else {
       stopCamera();
     }
@@ -131,212 +137,100 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
     };
   }, [isOpen, inputSource]);
 
-  const stopCamera = async () => {
-    if (html5QrcodeRef.current) {
+  const stopCamera = () => {
+    if (streamControlRef.current) {
       try {
-        const scanner = html5QrcodeRef.current;
-        html5QrcodeRef.current = null;
-        if (scanner.isScanning) {
-          await scanner.stop();
-        }
-        await scanner.clear();
+        streamControlRef.current.stop();
       } catch (e) {
-        console.warn('Camera stop warning:', e);
+        console.warn('Camera stream stop warning:', e);
       }
-    }
-    const container = document.getElementById('qr-reader-container');
-    if (container) {
-      container.innerHTML = '';
+      streamControlRef.current = null;
     }
     setIsCameraActive(false);
     setIsFlashOn(false);
   };
 
   const startCamera = async (targetCameraId?: string) => {
-    if (isTransitioningRef.current) {
-      console.warn('Camera transition already in progress, skipping duplicate start call.');
-      return;
-    }
-    isTransitioningRef.current = true;
     setCameraError(null);
+    setIsPermissionDenied(false);
+    stopCamera();
 
-    try {
-      // Clean up any running instance
-      await stopCamera();
-
-      const container = document.getElementById('qr-reader-container');
-      if (!container) {
-        console.warn('qr-reader-container element not mounted in DOM yet.');
+    if (!videoRef.current) {
+      // Retry once after short delay if video DOM node is mounting
+      await new Promise((r) => setTimeout(r, 100));
+      if (!videoRef.current) {
+        console.warn('Video element ref not mounted yet.');
         return;
       }
-      container.innerHTML = '';
+    }
 
-      // Get available camera devices
+    // Check permission status proactively if permissions API is available
+    if (typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
       try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          setAvailableCameras(devices);
-        }
-      } catch (e) {
-        console.warn('Initial camera enumeration warning:', e);
-      }
-
-      const config = {
-        fps: 25,
-        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const w = Math.min(viewfinderWidth - 10, Math.floor(viewfinderWidth * 0.92));
-          const h = Math.min(viewfinderHeight - 10, Math.floor(viewfinderHeight * 0.65));
-          return {
-            width: Math.max(w, 240),
-            height: Math.max(h, 130),
-          };
-        },
-        disableFlip: false,
-      };
-
-      const onSuccess = (decodedText: string) => {
-        const cleanCode = decodedText.trim();
-        const now = Date.now();
-        // Prevent rapid duplicate scans within 1.2 seconds
-        if (
-          lastScannedBarcodeRef.current === cleanCode &&
-          now - lastScannedTimeRef.current < 1200
-        ) {
+        const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        if (permissionStatus.state === 'denied') {
+          setIsPermissionDenied(true);
+          setCameraError(
+            'Kamera erişim izni engellenmiş. Tarayıcınız kamerasız canlı yayını engelliyor. Aşağıdaki adımları takip ederek izni kolayca açabilirsiniz.'
+          );
+          setIsCameraActive(false);
           return;
         }
-        lastScannedBarcodeRef.current = cleanCode;
-        lastScannedTimeRef.current = now;
-
-        // Provide immediate tactile vibration on mobile devices
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-          try {
-            navigator.vibrate(80);
-          } catch (e) {
-            // Vibration unsupported or denied
-          }
-        }
-
-        handleBarcodeScanned(cleanCode, 'BARCODE_CAMERA');
-      };
-
-      const onError = () => {
-        // Continuous frame analysis logs ignored
-      };
-
-      const activeCamSelection = targetCameraId || selectedCameraId;
-      let primaryConstraint: any = {
-        facingMode: 'environment',
-        width: { min: 640, ideal: 1280, max: 1920 },
-        height: { min: 480, ideal: 720, max: 1080 },
-      };
-
-      if (activeCamSelection === 'user') {
-        primaryConstraint = { facingMode: 'user' };
-      } else if (activeCamSelection && activeCamSelection !== 'environment') {
-        primaryConstraint = activeCamSelection;
-      } else {
-        primaryConstraint = {
-          facingMode: 'environment',
-          width: { min: 640, ideal: 1280, max: 1920 },
-          height: { min: 480, ideal: 720, max: 1080 },
-        };
+      } catch (e) {
+        // Permission query not supported for camera in some browsers
       }
+    }
 
-      let scanner = new Html5Qrcode('qr-reader-container', {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_93,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.CODABAR,
-        ],
-        verbose: false,
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true,
+    // Get available camera devices
+    try {
+      const devices = await getCameraDevices();
+      if (devices && devices.length > 0) {
+        setAvailableCameras(devices);
+      }
+    } catch (e) {
+      console.warn('Initial camera enumeration warning:', e);
+    }
+
+    const activeSel = targetCameraId || selectedCameraId || 'environment';
+    const cameraFacingMode = activeSel === 'user' ? 'user' : 'environment';
+    const deviceId = (activeSel !== 'environment' && activeSel !== 'user') ? activeSel : undefined;
+
+    try {
+      const control = await startCameraStream(
+        videoRef.current,
+        (scannedCode) => {
+          // Provide tactile vibration on mobile
+          if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            try { navigator.vibrate(80); } catch (e) { /* ignore */ }
+          }
+          handleBarcodeScanned(scannedCode, 'BARCODE_CAMERA');
         },
-      });
+        cameraFacingMode,
+        deviceId
+      );
 
-      let startedSuccessfully = false;
-
-      try {
-        await scanner.start(primaryConstraint, config, onSuccess, onError);
-        startedSuccessfully = true;
-      } catch (firstErr) {
-        console.warn('Primary camera constraint failed, cleaning up before fallback:', firstErr);
-        try {
-          await scanner.clear();
-        } catch (e) {
-          // ignore
-        }
-        container.innerHTML = '';
-
-        // Create a completely fresh Html5Qrcode instance for fallback
-        const fallbackConstraint = activeCamSelection === 'user' ? { facingMode: 'environment' } : { facingMode: 'user' };
-        scanner = new Html5Qrcode('qr-reader-container', {
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.QR_CODE,
-          ],
-          verbose: false,
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true,
-          },
-        });
-
-        try {
-          await scanner.start(fallbackConstraint, config, onSuccess, onError);
-          startedSuccessfully = true;
-          setSelectedCameraId(activeCamSelection === 'user' ? 'environment' : 'user');
-        } catch (secondErr) {
-          console.error('Fallback camera start also failed:', secondErr);
-          throw secondErr;
-        }
-      }
-
-      if (startedSuccessfully) {
-        html5QrcodeRef.current = scanner;
-        setIsCameraActive(true);
-
-        // Check torch/flash capability
-        try {
-          const capabilities = scanner.getRunningTrackCapabilities();
-          if (capabilities && 'torch' in capabilities) {
-            setHasFlash(true);
-          } else {
-            setHasFlash(false);
-          }
-        } catch (e) {
-          setHasFlash(false);
-        }
-      }
+      streamControlRef.current = control;
+      setIsCameraActive(true);
+      setHasFlash(control.hasFlash);
     } catch (err: unknown) {
-      console.error('Camera start final catch:', err);
+      console.error('Camera stream start error:', err);
       const errMsg = err instanceof Error ? err.message : String(err);
       if (
         errMsg.toLowerCase().includes('permission') ||
         errMsg.toLowerCase().includes('notallowed') ||
         errMsg.toLowerCase().includes('denied')
       ) {
+        setIsPermissionDenied(true);
         setCameraError(
-          'Kamera erişim izni vermelisiniz. Lütfen tarayıcı adres çubuğundaki kilit ikona dokunup kamera iznini "İzin Ver" olarak değiştirin.'
+          'Kamera erişim izni vermelisiniz. Tarayıcınız canlı kamera akışını engelledi. Aşağıdaki rehberi izleyerek izni açabilir veya Fotoğraf Çek & Okut seçeneğini kullanabilirsiniz.'
         );
       } else {
+        setIsPermissionDenied(false);
         setCameraError(
-          'Kamera başlatılamadı. Lütfen cihaz kamerasının başka bir uygulama tarafından kullanılmadığından emin olun veya "Galeriden Tara" seçeneğini kullanın.'
+          'Kamera başlatılamadı. Lütfen cihaz kamerasının başka bir uygulama tarafından kullanılmadığından emin olun veya "📸 Fotoğraf Çek & Okut" seçeneğini kullanın.'
         );
       }
       setIsCameraActive(false);
-    } finally {
-      isTransitioningRef.current = false;
     }
   };
 
@@ -349,28 +243,17 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
   };
 
   const handleSwitchCamera = async () => {
-    let nextMode = 'environment';
-    if (selectedCameraId === 'environment' || !selectedCameraId) {
-      nextMode = 'user';
-    } else if (selectedCameraId === 'user') {
-      nextMode = 'environment';
-    } else {
-      nextMode = 'environment';
-    }
+    const nextMode = (selectedCameraId === 'environment' || !selectedCameraId) ? 'user' : 'environment';
     setSelectedCameraId(nextMode);
     await startCamera(nextMode);
   };
 
   const toggleFlashlight = async () => {
-    if (!html5QrcodeRef.current || !isCameraActive) return;
-    try {
-      const nextState = !isFlashOn;
-      await html5QrcodeRef.current.applyVideoConstraints({
-        advanced: [{ torch: nextState } as any],
-      });
+    if (!streamControlRef.current || !isCameraActive) return;
+    const nextState = !isFlashOn;
+    const success = await streamControlRef.current.toggleFlash(nextState);
+    if (success) {
       setIsFlashOn(nextState);
-    } catch (e) {
-      console.warn('Flashlight toggle error:', e);
     }
   };
 
@@ -379,13 +262,9 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
     const file = e.target.files[0];
     setCameraError(null);
     try {
-      const html5Qr = new Html5Qrcode('qr-reader-container', {
-        verbose: false,
-        experimentalFeatures: { useBarCodeDetectorIfSupported: false },
-      });
-      const decodedText = await html5Qr.scanFile(file, true);
-      if (decodedText) {
-        handleBarcodeScanned(decodedText.trim(), 'BARCODE_CAMERA');
+      const scannedText = await scanBarcodeFromImageFile(file);
+      if (scannedText) {
+        handleBarcodeScanned(scannedText, 'BARCODE_CAMERA');
       }
     } catch (err) {
       console.error('Fotoğraftan barkod okuma hatası:', err);
@@ -769,7 +648,13 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
               `}</style>
 
               <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black min-h-[250px] flex items-center justify-center border border-gray-700">
-                <div id="qr-reader-container" className="w-full h-full" />
+                <video
+                  ref={videoRef}
+                  className="w-full h-full max-h-[280px] object-contain rounded-lg bg-black"
+                  playsInline
+                  autoPlay
+                  muted
+                />
 
                 {isCameraActive && (
                   <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4">
@@ -892,15 +777,64 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
               </div>
 
               {cameraError && (
-                <div className="mt-3 p-3 bg-rose-900/60 border border-rose-700 rounded-lg text-xs text-rose-200 w-full flex flex-col gap-2">
-                  <div>{cameraError}</div>
-                  <button
-                    type="button"
-                    onClick={() => startCamera(selectedCameraId || undefined)}
-                    className="self-start px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white font-bold rounded text-xs transition"
-                  >
-                    Kamerayı Tekrar Dene
-                  </button>
+                <div className="mt-3 p-4 bg-rose-950/80 border-2 border-rose-700/80 rounded-xl text-xs text-rose-100 w-full flex flex-col gap-3 shadow-lg">
+                  <div className="flex items-start space-x-2.5">
+                    <Lock className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="font-bold text-sm text-rose-200">
+                        {isPermissionDenied ? '🔒 Kamera Erişim İzni Engellendi' : '⚠️ Kamera Başlatılamadı'}
+                      </div>
+                      <p className="text-rose-300 leading-relaxed">{cameraError}</p>
+                    </div>
+                  </div>
+
+                  {isPermissionDenied && (
+                    <div className="bg-rose-900/60 p-3 rounded-lg border border-rose-800/60 space-y-1.5 text-rose-200 text-xs">
+                      <div className="font-bold text-amber-300 flex items-center space-x-1">
+                        <Info className="w-4 h-4 flex-shrink-0" />
+                        <span>Kamera İznini Nasıl Açabilirsiniz?</span>
+                      </div>
+                      <ol className="list-decimal list-inside space-y-1 text-rose-200/90 pl-1">
+                        <li>Tarayıcınızın adres çubuğundaki kilit (🔒) veya ayarlar simgesine dokunun.</li>
+                        <li>Kamera seçeneğini <strong>"İzin Ver" / "Allow"</strong> olarak değiştirin.</li>
+                        <li>İzni değiştirdikten sonra aşağıdaki <strong>"Kamerayı Yeniden Başlat"</strong> butonuna dokunun.</li>
+                      </ol>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => startCamera(selectedCameraId || undefined)}
+                      className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-gray-950 font-bold rounded-lg text-xs transition flex items-center space-x-1.5 shadow"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>Kamerayı Yeniden Başlat</span>
+                    </button>
+
+                    <label className="cursor-pointer px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition flex items-center space-x-1.5 shadow">
+                      <Camera className="w-4 h-4" />
+                      <span>📸 Fotoğraf Çek & Okut (İzin İstemez)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopCamera();
+                        setInputSource('USB_KEYBOARD');
+                      }}
+                      className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold rounded-lg text-xs border border-gray-700 transition"
+                    >
+                      <span>⌨️ Manuel / USB Girişine Geç</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
