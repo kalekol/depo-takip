@@ -95,6 +95,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
+  const isTransitioningRef = useRef<boolean>(false);
   const lastScannedBarcodeRef = useRef<string>('');
   const lastScannedTimeRef = useRef<number>(0);
 
@@ -118,7 +119,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         if (isMounted) {
           startCamera(selectedCameraId || undefined);
         }
-      }, 50);
+      }, 80);
     } else {
       stopCamera();
     }
@@ -133,68 +134,55 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
   const stopCamera = async () => {
     if (html5QrcodeRef.current) {
       try {
-        if (html5QrcodeRef.current.isScanning) {
-          await html5QrcodeRef.current.stop();
+        const scanner = html5QrcodeRef.current;
+        html5QrcodeRef.current = null;
+        if (scanner.isScanning) {
+          await scanner.stop();
         }
-        await html5QrcodeRef.current.clear();
+        await scanner.clear();
       } catch (e) {
         console.warn('Camera stop warning:', e);
       }
-      html5QrcodeRef.current = null;
+    }
+    const container = document.getElementById('qr-reader-container');
+    if (container) {
+      container.innerHTML = '';
     }
     setIsCameraActive(false);
     setIsFlashOn(false);
   };
 
   const startCamera = async (targetCameraId?: string) => {
-    setCameraError(null);
-
-    // Verify DOM element exists before attempting scanner attachment
-    const container = document.getElementById('qr-reader-container');
-    if (!container) {
-      console.warn('qr-reader-container element not mounted in DOM yet.');
+    if (isTransitioningRef.current) {
+      console.warn('Camera transition already in progress, skipping duplicate start call.');
       return;
     }
+    isTransitioningRef.current = true;
+    setCameraError(null);
 
     try {
+      // Clean up any running instance
       await stopCamera();
 
+      const container = document.getElementById('qr-reader-container');
+      if (!container) {
+        console.warn('qr-reader-container element not mounted in DOM yet.');
+        return;
+      }
+      container.innerHTML = '';
+
       // Get available camera devices
-      let devices: { id: string; label: string }[] = [];
       try {
-        devices = await Html5Qrcode.getCameras();
+        const devices = await Html5Qrcode.getCameras();
         if (devices && devices.length > 0) {
           setAvailableCameras(devices);
         }
       } catch (e) {
-        console.warn('Initial camera enumeration failed:', e);
+        console.warn('Initial camera enumeration warning:', e);
       }
 
-      const scanner = new Html5Qrcode('qr-reader-container', {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_93,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODABAR,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-          Html5QrcodeSupportedFormats.AZTEC,
-        ],
-        verbose: false,
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true,
-        },
-      });
-
-      html5QrcodeRef.current = scanner;
-
       const config = {
-        fps: 30,
+        fps: 25,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const w = Math.min(viewfinderWidth - 4, Math.floor(viewfinderWidth * 0.98));
           const h = Math.min(viewfinderHeight - 4, Math.floor(viewfinderHeight * 0.80));
@@ -235,67 +223,91 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         // Continuous frame analysis logs ignored
       };
 
-      // Determine primary camera constraint with resolution & focus hints
-      let primaryConstraint: any = {
-        facingMode: 'environment',
-        width: { min: 640, ideal: 1280, max: 1920 },
-        height: { min: 480, ideal: 720, max: 1080 },
-      };
-
       const activeCamSelection = targetCameraId || selectedCameraId;
+      let primaryConstraint: any = { facingMode: 'environment' };
 
       if (activeCamSelection === 'user') {
         primaryConstraint = { facingMode: 'user' };
-      } else if (activeCamSelection === 'environment' || !activeCamSelection) {
-        primaryConstraint = {
-          facingMode: 'environment',
-          width: { min: 640, ideal: 1280, max: 1920 },
-          height: { min: 480, ideal: 720, max: 1080 },
-        };
-      } else {
+      } else if (activeCamSelection && activeCamSelection !== 'environment') {
         primaryConstraint = activeCamSelection;
+      } else {
+        primaryConstraint = { facingMode: 'environment' };
       }
 
-      // Try starting scanner with preferred rear camera constraint
+      let scanner = new Html5Qrcode('qr-reader-container', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+          Html5QrcodeSupportedFormats.AZTEC,
+        ],
+        verbose: false,
+      });
+
+      let startedSuccessfully = false;
+
       try {
         await scanner.start(primaryConstraint, config, onSuccess, onError);
+        startedSuccessfully = true;
       } catch (firstErr) {
-        console.warn('Primary camera constraint failed, falling back to facingMode environment:', firstErr);
+        console.warn('Primary camera constraint failed, cleaning up before fallback:', firstErr);
         try {
-          await scanner.start({ facingMode: 'environment' }, config, onSuccess, onError);
-          setSelectedCameraId('environment');
+          await scanner.clear();
+        } catch (e) {
+          // ignore
+        }
+        container.innerHTML = '';
+
+        // Create a completely fresh Html5Qrcode instance for fallback
+        const fallbackConstraint = activeCamSelection === 'user' ? { facingMode: 'environment' } : { facingMode: 'user' };
+        scanner = new Html5Qrcode('qr-reader-container', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.QR_CODE,
+          ],
+          verbose: false,
+        });
+
+        try {
+          await scanner.start(fallbackConstraint, config, onSuccess, onError);
+          startedSuccessfully = true;
+          setSelectedCameraId(activeCamSelection === 'user' ? 'environment' : 'user');
         } catch (secondErr) {
-          console.warn('Environment facingMode failed, falling back to front user camera:', secondErr);
-          await scanner.start({ facingMode: 'user' }, config, onSuccess, onError);
-          setSelectedCameraId('user');
+          console.error('Fallback camera start also failed:', secondErr);
+          throw secondErr;
         }
       }
 
-      setIsCameraActive(true);
+      if (startedSuccessfully) {
+        html5QrcodeRef.current = scanner;
+        setIsCameraActive(true);
 
-      // Refresh camera devices list again if labels became available after permission
-      try {
-        const freshDevs = await Html5Qrcode.getCameras();
-        if (freshDevs && freshDevs.length > 0) {
-          setAvailableCameras(freshDevs);
-        }
-      } catch (e) {
-        // Camera enumeration error ignored
-      }
-
-      // Check torch/flash capability
-      try {
-        const capabilities = scanner.getRunningTrackCapabilities();
-        if (capabilities && 'torch' in capabilities) {
-          setHasFlash(true);
-        } else {
+        // Check torch/flash capability
+        try {
+          const capabilities = scanner.getRunningTrackCapabilities();
+          if (capabilities && 'torch' in capabilities) {
+            setHasFlash(true);
+          } else {
+            setHasFlash(false);
+          }
+        } catch (e) {
           setHasFlash(false);
         }
-      } catch (e) {
-        setHasFlash(false);
       }
     } catch (err: unknown) {
-      console.error('Camera start error:', err);
+      console.error('Camera start final catch:', err);
       const errMsg = err instanceof Error ? err.message : String(err);
       if (
         errMsg.toLowerCase().includes('permission') ||
@@ -307,10 +319,12 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         );
       } else {
         setCameraError(
-          `Kamera başlatılamadı (${errMsg}). Lütfen kamerasının başka bir uygulama tarafından kullanılmadığından emin olun veya "Galeriden Tara" seçeneğini kullanın.`
+          'Kamera başlatılamadı. Lütfen cihaz kamerasının başka bir uygulama tarafından kullanılmadığından emin olun veya "Galeriden Tara" seçeneğini kullanın.'
         );
       }
       setIsCameraActive(false);
+    } finally {
+      isTransitioningRef.current = false;
     }
   };
 
