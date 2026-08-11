@@ -118,7 +118,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         if (isMounted) {
           startCamera(selectedCameraId || undefined);
         }
-      }, 200);
+      }, 50);
     } else {
       stopCamera();
     }
@@ -173,17 +173,17 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
       const scanner = new Html5Qrcode('qr-reader-container', {
         formatsToSupport: [
           Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.CODE_93,
           Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODABAR,
           Html5QrcodeSupportedFormats.DATA_MATRIX,
           Html5QrcodeSupportedFormats.AZTEC,
-          Html5QrcodeSupportedFormats.CODABAR,
         ],
         verbose: false,
         experimentalFeatures: {
@@ -194,31 +194,39 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
       html5QrcodeRef.current = scanner;
 
       const config = {
-        fps: 25,
+        fps: 30,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const w = Math.min(viewfinderWidth - 10, Math.floor(viewfinderWidth * 0.95));
-          const h = Math.min(viewfinderHeight - 10, Math.floor(viewfinderHeight * 0.65));
+          const w = Math.min(viewfinderWidth - 4, Math.floor(viewfinderWidth * 0.98));
+          const h = Math.min(viewfinderHeight - 4, Math.floor(viewfinderHeight * 0.80));
           return {
-            width: Math.max(w, 220),
-            height: Math.max(h, 130),
+            width: Math.max(w, 240),
+            height: Math.max(h, 140),
           };
         },
-        aspectRatio: 1.333333,
         disableFlip: false,
       };
 
       const onSuccess = (decodedText: string) => {
         const cleanCode = decodedText.trim();
         const now = Date.now();
-        // Prevent rapid duplicate scans within 1.5 seconds
+        // Prevent rapid duplicate scans within 1.2 seconds
         if (
           lastScannedBarcodeRef.current === cleanCode &&
-          now - lastScannedTimeRef.current < 1500
+          now - lastScannedTimeRef.current < 1200
         ) {
           return;
         }
         lastScannedBarcodeRef.current = cleanCode;
         lastScannedTimeRef.current = now;
+
+        // Provide immediate tactile vibration on mobile devices
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          try {
+            navigator.vibrate(80);
+          } catch (e) {
+            // Vibration unsupported or denied
+          }
+        }
 
         handleBarcodeScanned(cleanCode, 'BARCODE_CAMERA');
       };
@@ -227,63 +235,39 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         // Continuous frame analysis logs ignored
       };
 
-      // Determine primary camera constraint
-      let primaryConstraint: any = null;
+      // Determine primary camera constraint with resolution & focus hints
+      let primaryConstraint: any = {
+        facingMode: 'environment',
+        width: { min: 640, ideal: 1280, max: 1920 },
+        height: { min: 480, ideal: 720, max: 1080 },
+      };
 
-      if (targetCameraId) {
-        primaryConstraint = targetCameraId;
-        setSelectedCameraId(targetCameraId);
-      } else if (selectedCameraId && selectedCameraId !== 'environment' && selectedCameraId !== 'user') {
-        primaryConstraint = selectedCameraId;
-      } else if (devices && devices.length > 0) {
-        // Search for rear/back camera among enumerated devices
-        const rearCam =
-          devices.find((d) => {
-            const l = d.label.toLowerCase();
-            return (
-              l.includes('back') ||
-              l.includes('rear') ||
-              l.includes('arka') ||
-              l.includes('environment') ||
-              l.includes('0, facing back') ||
-              l.includes('outer')
-            );
-          }) ||
-          devices.find((d) => {
-            const l = d.label.toLowerCase();
-            return !l.includes('front') && !l.includes('user') && !l.includes('ön') && !l.includes('selfie');
-          }) ||
-          devices[0];
+      const activeCamSelection = targetCameraId || selectedCameraId;
 
-        primaryConstraint = rearCam.id;
-        setSelectedCameraId(rearCam.id);
+      if (activeCamSelection === 'user') {
+        primaryConstraint = { facingMode: 'user' };
+      } else if (activeCamSelection === 'environment' || !activeCamSelection) {
+        primaryConstraint = {
+          facingMode: 'environment',
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 },
+        };
       } else {
-        // Fallback to environment facingMode without resolution min/max bounds
-        primaryConstraint = { facingMode: 'environment' };
-        setSelectedCameraId('environment');
+        primaryConstraint = activeCamSelection;
       }
 
       // Try starting scanner with preferred rear camera constraint
       try {
         await scanner.start(primaryConstraint, config, onSuccess, onError);
       } catch (firstErr) {
-        console.warn('Primary camera start failed, trying environment facingMode:', firstErr);
+        console.warn('Primary camera constraint failed, falling back to facingMode environment:', firstErr);
         try {
           await scanner.start({ facingMode: 'environment' }, config, onSuccess, onError);
           setSelectedCameraId('environment');
         } catch (secondErr) {
-          console.warn('Environment facingMode failed, checking device list fallback:', secondErr);
-          const freshDevices = await Html5Qrcode.getCameras();
-          if (freshDevices && freshDevices.length > 0) {
-            setAvailableCameras(freshDevices);
-            const fallbackCam = freshDevices[0];
-            setSelectedCameraId(fallbackCam.id);
-            await scanner.start(fallbackCam.id, config, onSuccess, onError);
-          } else {
-            // Absolute last resort
-            await scanner.start({ facingMode: 'user' }, config, onSuccess, onError);
-            setSelectedCameraId('user');
-          }
+          console.warn('Environment facingMode failed, falling back to front user camera:', secondErr);
+          await scanner.start({ facingMode: 'user' }, config, onSuccess, onError);
+          setSelectedCameraId('user');
         }
       }
 
@@ -339,17 +323,16 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
   };
 
   const handleSwitchCamera = async () => {
-    if (availableCameras.length > 1) {
-      const currentIndex = availableCameras.findIndex((c) => c.id === selectedCameraId);
-      const nextIndex = (currentIndex + 1) % availableCameras.length;
-      const nextCam = availableCameras[nextIndex];
-      setSelectedCameraId(nextCam.id);
-      await startCamera(nextCam.id);
+    let nextMode = 'environment';
+    if (selectedCameraId === 'environment' || !selectedCameraId) {
+      nextMode = 'user';
+    } else if (selectedCameraId === 'user') {
+      nextMode = 'environment';
     } else {
-      const nextMode = selectedCameraId === 'user' ? 'environment' : 'user';
-      setSelectedCameraId(nextMode);
-      await startCamera(nextMode);
+      nextMode = 'environment';
     }
+    setSelectedCameraId(nextMode);
+    await startCamera(nextMode);
   };
 
   const toggleFlashlight = async () => {
@@ -372,7 +355,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
     try {
       const html5Qr = new Html5Qrcode('qr-reader-container', {
         verbose: false,
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        experimentalFeatures: { useBarCodeDetectorIfSupported: false },
       });
       const decodedText = await html5Qr.scanFile(file, true);
       if (decodedText) {
@@ -755,23 +738,26 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                   </span>
 
                   {/* Camera Selection Dropdown */}
-                  {availableCameras.length > 1 && (
-                    <select
-                      value={selectedCameraId}
-                      onChange={(e) => {
-                        const newCamId = e.target.value;
-                        setSelectedCameraId(newCamId);
-                        startCamera(newCamId);
-                      }}
-                      className="bg-gray-800 text-amber-400 text-xs rounded-lg border border-gray-700 px-2 py-1 focus:outline-none"
-                    >
-                      {availableCameras.map((cam, idx) => (
+                  <select
+                    value={selectedCameraId || 'environment'}
+                    onChange={(e) => {
+                      const newCamId = e.target.value;
+                      setSelectedCameraId(newCamId);
+                      startCamera(newCamId);
+                    }}
+                    className="bg-gray-800 text-amber-400 text-xs rounded-lg border border-gray-700 px-2 py-1 focus:outline-none max-w-[200px] truncate"
+                  >
+                    <option value="environment">📷 Ana Arka Kamera (Önerilen)</option>
+                    <option value="user">🤳 Ön Kamera</option>
+                    {availableCameras.map((cam, idx) => {
+                      if (cam.id === 'environment' || cam.id === 'user') return null;
+                      return (
                         <option key={cam.id} value={cam.id}>
-                          {cam.label || `Kamera ${idx + 1}`}
+                          {cam.label || `Ek Kamera ${idx + 1}`}
                         </option>
-                      ))}
-                    </select>
-                  )}
+                      );
+                    })}
+                  </select>
                 </div>
 
                 <div className="flex items-center space-x-1.5 flex-wrap gap-y-1.5">
