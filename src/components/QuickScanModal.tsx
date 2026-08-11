@@ -182,7 +182,15 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
       }
 
       const config = {
-        fps: 15,
+        fps: 25,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const w = Math.min(viewfinderWidth - 10, Math.floor(viewfinderWidth * 0.92));
+          const h = Math.min(viewfinderHeight - 10, Math.floor(viewfinderHeight * 0.65));
+          return {
+            width: Math.max(w, 240),
+            height: Math.max(h, 130),
+          };
+        },
         disableFlip: false,
       };
 
@@ -216,14 +224,22 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
       };
 
       const activeCamSelection = targetCameraId || selectedCameraId;
-      let primaryConstraint: any = { facingMode: 'environment' };
+      let primaryConstraint: any = {
+        facingMode: 'environment',
+        width: { min: 640, ideal: 1280, max: 1920 },
+        height: { min: 480, ideal: 720, max: 1080 },
+      };
 
       if (activeCamSelection === 'user') {
         primaryConstraint = { facingMode: 'user' };
       } else if (activeCamSelection && activeCamSelection !== 'environment') {
         primaryConstraint = activeCamSelection;
       } else {
-        primaryConstraint = { facingMode: 'environment' };
+        primaryConstraint = {
+          facingMode: 'environment',
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 },
+        };
       }
 
       let scanner = new Html5Qrcode('qr-reader-container', {
@@ -240,6 +256,9 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
           Html5QrcodeSupportedFormats.CODABAR,
         ],
         verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
       });
 
       let startedSuccessfully = false;
@@ -260,14 +279,17 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         const fallbackConstraint = activeCamSelection === 'user' ? { facingMode: 'environment' } : { facingMode: 'user' };
         scanner = new Html5Qrcode('qr-reader-container', {
           formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_128,
             Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.CODE_128,
             Html5QrcodeSupportedFormats.CODE_39,
             Html5QrcodeSupportedFormats.UPC_A,
             Html5QrcodeSupportedFormats.EAN_8,
             Html5QrcodeSupportedFormats.QR_CODE,
           ],
           verbose: false,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
         });
 
         try {
@@ -726,8 +748,9 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                   width: 100% !important;
                   height: 100% !important;
                   max-height: 280px;
-                  object-fit: cover !important;
+                  object-fit: contain !important;
                   border-radius: 0.5rem;
+                  background-color: #000;
                 }
                 #qr-reader-container canvas {
                   display: none !important;
@@ -820,6 +843,18 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                       <span>{isFlashOn ? 'Flaş Kapat' : 'Flaş Aç'}</span>
                     </button>
                   )}
+
+                  <label className="cursor-pointer px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center space-x-1 shadow-sm" title="Telefonun kendi kamerasıyla net fotoğraf çekip anında oku">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>📸 Fotoğraf Çek & Okut</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
 
                   <label className="cursor-pointer px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-amber-400 text-xs font-semibold rounded-lg border border-gray-700 transition flex items-center space-x-1">
                     <Upload className="w-3.5 h-3.5" />
