@@ -31,74 +31,74 @@ export const Navbar: React.FC<NavbarProps> = ({
   totalCompleteSets,
 }) => {
   return (
-    <header className="bg-gray-900 text-white shadow-xl border-b border-gray-800 sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
+    <header className="bg-gray-900 text-white shadow-xl border-b border-gray-800 sticky top-0 z-40 w-full overflow-hidden">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 w-full">
+        <div className="flex items-center justify-between h-16 sm:h-20 gap-1.5 sm:gap-3">
           {/* Logo & Title */}
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-amber-500 rounded-xl text-gray-950 shadow-md">
-              <Boxes className="w-6 h-6 stroke-[2.5]" />
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0 min-w-0">
+            <div className="p-2 sm:p-2.5 bg-amber-500 rounded-xl text-gray-950 shadow-md flex-shrink-0">
+              <Boxes className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
             </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg sm:text-xl font-black tracking-tight text-white">
-                  KOLİ & DEPO<span className="text-amber-400">TAKİP</span>
-                </span>
-              </div>
+            <div className="min-w-0">
+              <span className="text-sm sm:text-xl font-black tracking-tight text-white block truncate">
+                KOLİ & DEPO<span className="text-amber-400">TAKİP</span>
+              </span>
             </div>
           </div>
 
-          {/* Key Actions Toolbar */}
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* Key Actions Toolbar - Fits on mobile without overflow */}
+          <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
             {/* Hızlı Barkod Taraması - PRIMARY BUTTON */}
             <button
               onClick={onOpenQuickScan}
-              className="px-3.5 sm:px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-gray-950 font-black text-xs sm:text-sm rounded-xl shadow-lg hover:shadow-amber-500/20 transition flex items-center space-x-2 border border-amber-400"
+              className="px-2.5 sm:px-4 py-2 sm:py-2.5 bg-amber-500 hover:bg-amber-400 text-gray-950 font-black text-xs sm:text-sm rounded-xl shadow-lg transition flex items-center space-x-1 sm:space-x-2 border border-amber-400"
             >
-              <Barcode className="w-5 h-5 stroke-[2.5]" />
-              <span>Hızlı Barkod / Kamera</span>
+              <Barcode className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5] flex-shrink-0" />
+              <span className="hidden xs:inline sm:inline">Hızlı Barkod</span>
+              <span className="xs:hidden sm:hidden">Barkod</span>
             </button>
 
             {/* Yeni Mobilya Tanımla */}
             <button
               onClick={onOpenAddProduct}
-              className="px-3 sm:px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-gray-700 shadow-sm transition flex items-center space-x-1.5"
+              className="px-2 sm:px-3.5 py-2 sm:py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xs sm:text-sm rounded-xl border border-gray-700 shadow-sm transition flex items-center space-x-1"
+              title="Yeni Mobilya & Koli Ekle"
             >
-              <PlusCircle className="w-4 h-4 text-amber-400" />
+              <PlusCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
               <span className="hidden md:inline">Yeni Mobilya & Koli Ekle</span>
-              <span className="md:hidden">Ürün Ekle</span>
+              <span className="hidden sm:inline md:hidden">Ürün Ekle</span>
             </button>
 
             {/* Excel İle Toplu Yükle */}
             {onOpenExcelImport && (
               <button
                 onClick={onOpenExcelImport}
-                className="px-3 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center space-x-1.5 border border-emerald-600"
+                className="px-2 sm:px-3 py-2 sm:py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center space-x-1 border border-emerald-600"
                 title="Excel veya CSV dosyasından toplu ürün ve koli yükleyin"
               >
-                <FileSpreadsheet className="w-4 h-4 text-amber-300" />
+                <FileSpreadsheet className="w-4 h-4 text-amber-300 flex-shrink-0" />
                 <span className="hidden lg:inline">Excel ile Yükle</span>
-                <span className="lg:hidden">Excel</span>
+                <span className="hidden sm:inline lg:hidden">Excel</span>
               </button>
             )}
 
             {/* Kategori Yönetimi */}
             <button
               onClick={onOpenCategoryManager}
-              className="px-3 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white rounded-xl border border-gray-700 transition flex items-center space-x-1.5"
+              className="p-2 sm:px-3 sm:py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white rounded-xl border border-gray-700 transition flex items-center space-x-1.5"
               title="Kategori Ekle / Çıkar / Düzenle"
             >
-              <FolderOpen className="w-5 h-5 text-amber-400" />
+              <FolderOpen className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 flex-shrink-0" />
               <span className="hidden xl:inline text-xs font-bold">Kategoriler</span>
             </button>
 
             {/* Tarihçe / Geçmiş */}
             <button
               onClick={onOpenHistory}
-              className="p-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white rounded-xl border border-gray-700 transition"
+              className="p-2 sm:p-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white rounded-xl border border-gray-700 transition"
               title="Barkod Tarama ve Stok İşlem Geçmişi"
             >
-              <History className="w-5 h-5" />
+              <History className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
             {/* Excel CSV */}

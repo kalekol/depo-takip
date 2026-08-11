@@ -448,7 +448,7 @@ export default function App() {
   }, [products, searchTerm, categoryFilter, stockStatusFilter]);
 
   return (
-    <div className="min-h-screen bg-gray-100/80 text-gray-900 flex flex-col">
+    <div className="min-h-screen bg-gray-100/80 text-gray-900 flex flex-col w-full max-w-full overflow-x-hidden">
       {/* Primary Navbar */}
       <Navbar
         onOpenQuickScan={() => setIsQuickScanOpen(true)}
@@ -465,7 +465,7 @@ export default function App() {
       />
 
       {/* Main Single-View Content Dashboard */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-8 overflow-x-hidden min-w-0">
         {/* Warehouse KPI Overview Cards */}
         <section aria-label="Depo Özeti ve İstatistikler">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -734,8 +734,8 @@ export default function App() {
           ) : viewMode === 'PACKAGES_ONLY' ? (
             /* Koli Olarak Gör (Liste Görünümü) */
             <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full min-w-[620px] text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold uppercase tracking-wider text-[10px]">
                       <th className="p-4">Kategori / Ürün Adı</th>
@@ -816,8 +816,8 @@ export default function App() {
           ) : viewMode === 'PRODUCT_ONLY' ? (
             /* Sadece Ürün Stoğu Görünümü (Sade Alt Alta Liste) */
             <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full min-w-[620px] text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 font-bold uppercase tracking-wider text-[10px]">
                       <th className="p-4">Kategori / Ürün Adı</th>

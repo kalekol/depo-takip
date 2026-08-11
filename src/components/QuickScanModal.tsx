@@ -24,6 +24,7 @@ import {
   Link as LinkIcon,
   Zap,
   ZapOff,
+  RefreshCw,
 } from 'lucide-react';
 
 interface QuickScanModalProps {
@@ -158,6 +159,17 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
     try {
       await stopCamera();
 
+      // Get available camera devices
+      let devices: { id: string; label: string }[] = [];
+      try {
+        devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          setAvailableCameras(devices);
+        }
+      } catch (e) {
+        console.warn('Initial camera enumeration failed:', e);
+      }
+
       const scanner = new Html5Qrcode('qr-reader-container', {
         formatsToSupport: [
           Html5QrcodeSupportedFormats.CODE_128,
@@ -182,13 +194,13 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
       html5QrcodeRef.current = scanner;
 
       const config = {
-        fps: 20,
+        fps: 25,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const width = Math.min(viewfinderWidth - 10, Math.floor(viewfinderWidth * 0.95));
-          const height = Math.min(viewfinderHeight - 10, Math.floor(viewfinderHeight * 0.65));
+          const w = Math.min(viewfinderWidth - 10, Math.floor(viewfinderWidth * 0.95));
+          const h = Math.min(viewfinderHeight - 10, Math.floor(viewfinderHeight * 0.65));
           return {
-            width: Math.max(width, 240),
-            height: Math.max(height, 140),
+            width: Math.max(w, 220),
+            height: Math.max(h, 130),
           };
         },
         aspectRatio: 1.333333,
@@ -215,54 +227,88 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         // Continuous frame analysis logs ignored
       };
 
-      const cameraConstraints = targetCameraId
-        ? targetCameraId
-        : {
-            facingMode: 'environment',
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 480, ideal: 720, max: 1080 },
-          };
+      // Determine primary camera constraint
+      let primaryConstraint: any = null;
 
+      if (targetCameraId) {
+        primaryConstraint = targetCameraId;
+        setSelectedCameraId(targetCameraId);
+      } else if (selectedCameraId && selectedCameraId !== 'environment' && selectedCameraId !== 'user') {
+        primaryConstraint = selectedCameraId;
+      } else if (devices && devices.length > 0) {
+        // Search for rear/back camera among enumerated devices
+        const rearCam =
+          devices.find((d) => {
+            const l = d.label.toLowerCase();
+            return (
+              l.includes('back') ||
+              l.includes('rear') ||
+              l.includes('arka') ||
+              l.includes('environment') ||
+              l.includes('0, facing back') ||
+              l.includes('outer')
+            );
+          }) ||
+          devices.find((d) => {
+            const l = d.label.toLowerCase();
+            return !l.includes('front') && !l.includes('user') && !l.includes('ön') && !l.includes('selfie');
+          }) ||
+          devices[0];
+
+        primaryConstraint = rearCam.id;
+        setSelectedCameraId(rearCam.id);
+      } else {
+        // Fallback to environment facingMode without resolution min/max bounds
+        primaryConstraint = { facingMode: 'environment' };
+        setSelectedCameraId('environment');
+      }
+
+      // Try starting scanner with preferred rear camera constraint
       try {
-        await scanner.start(cameraConstraints, config, onSuccess, onError);
-      } catch (envErr) {
-        console.warn('Environment facing mode failed, falling back to camera devices list:', envErr);
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          const preferredCam =
-            devices.find(
-              (d) =>
-                d.label.toLowerCase().includes('back') ||
-                d.label.toLowerCase().includes('rear') ||
-                d.label.toLowerCase().includes('arka')
-            ) || devices[0];
-          setSelectedCameraId(preferredCam.id);
-          await scanner.start(preferredCam.id, config, onSuccess, onError);
-        } else {
-          await scanner.start({ facingMode: 'user' }, config, onSuccess, onError);
+        await scanner.start(primaryConstraint, config, onSuccess, onError);
+      } catch (firstErr) {
+        console.warn('Primary camera start failed, trying environment facingMode:', firstErr);
+        try {
+          await scanner.start({ facingMode: 'environment' }, config, onSuccess, onError);
+          setSelectedCameraId('environment');
+        } catch (secondErr) {
+          console.warn('Environment facingMode failed, checking device list fallback:', secondErr);
+          const freshDevices = await Html5Qrcode.getCameras();
+          if (freshDevices && freshDevices.length > 0) {
+            setAvailableCameras(freshDevices);
+            const fallbackCam = freshDevices[0];
+            setSelectedCameraId(fallbackCam.id);
+            await scanner.start(fallbackCam.id, config, onSuccess, onError);
+          } else {
+            // Absolute last resort
+            await scanner.start({ facingMode: 'user' }, config, onSuccess, onError);
+            setSelectedCameraId('user');
+          }
         }
       }
 
       setIsCameraActive(true);
 
-      // Fetch list of cameras for user selection UI
+      // Refresh camera devices list again if labels became available after permission
       try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-          setAvailableCameras(devices);
+        const freshDevs = await Html5Qrcode.getCameras();
+        if (freshDevs && freshDevs.length > 0) {
+          setAvailableCameras(freshDevs);
         }
       } catch (e) {
-        // Camera enumeration ignored
+        // Camera enumeration error ignored
       }
 
-      // Check for torch capability
+      // Check torch/flash capability
       try {
         const capabilities = scanner.getRunningTrackCapabilities();
         if (capabilities && 'torch' in capabilities) {
           setHasFlash(true);
+        } else {
+          setHasFlash(false);
         }
       } catch (e) {
-        // Torch capability check ignored
+        setHasFlash(false);
       }
     } catch (err: unknown) {
       console.error('Camera start error:', err);
@@ -273,11 +319,11 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
         errMsg.toLowerCase().includes('denied')
       ) {
         setCameraError(
-          'Kamera erişim izni engellendi. Lütfen tarayıcı adres çubuğundaki kilit ikona dokunup kamera iznini "İzin Ver" olarak değiştirin.'
+          'Kamera erişim izni vermelisiniz. Lütfen tarayıcı adres çubuğundaki kilit ikona dokunup kamera iznini "İzin Ver" olarak değiştirin.'
         );
       } else {
         setCameraError(
-          `Kamera başlatılamadı (${errMsg}). Lütfen cihaz kamerasının başka bir uygulama tarafından kullanılmadığından emin olun veya USB/Manuel modunu tercih edin.`
+          `Kamera başlatılamadı (${errMsg}). Lütfen kamerasının başka bir uygulama tarafından kullanılmadığından emin olun veya "Galeriden Tara" seçeneğini kullanın.`
         );
       }
       setIsCameraActive(false);
@@ -289,6 +335,20 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
       stopCamera();
     } else {
       startCamera(selectedCameraId || undefined);
+    }
+  };
+
+  const handleSwitchCamera = async () => {
+    if (availableCameras.length > 1) {
+      const currentIndex = availableCameras.findIndex((c) => c.id === selectedCameraId);
+      const nextIndex = (currentIndex + 1) % availableCameras.length;
+      const nextCam = availableCameras[nextIndex];
+      setSelectedCameraId(nextCam.id);
+      await startCamera(nextCam.id);
+    } else {
+      const nextMode = selectedCameraId === 'user' ? 'environment' : 'user';
+      setSelectedCameraId(nextMode);
+      await startCamera(nextMode);
     }
   };
 
@@ -714,7 +774,18 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5 flex-wrap gap-y-1.5">
+                  {/* Kamerayı Çevir (Ön / Arka Değiştir) */}
+                  <button
+                    type="button"
+                    onClick={handleSwitchCamera}
+                    className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-gray-950 font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1"
+                    title="Ön ve Arka Kamerayı Değiştir"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>Kamerayı Çevir</span>
+                  </button>
+
                   {hasFlash && isCameraActive && (
                     <button
                       type="button"
@@ -731,7 +802,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                     </button>
                   )}
 
-                  <label className="cursor-pointer px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-amber-400 text-xs font-semibold rounded-lg border border-gray-700 transition flex items-center space-x-1.5">
+                  <label className="cursor-pointer px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-amber-400 text-xs font-semibold rounded-lg border border-gray-700 transition flex items-center space-x-1">
                     <Upload className="w-3.5 h-3.5" />
                     <span>Galeriden Tara</span>
                     <input
@@ -745,7 +816,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                   <button
                     type="button"
                     onClick={toggleCamera}
-                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                       isCameraActive
                         ? 'bg-rose-600 hover:bg-rose-700 text-white'
                         : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -759,7 +830,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                     ) : (
                       <>
                         <Camera className="w-3.5 h-3.5" />
-                        <span>Yeniden Aç</span>
+                        <span>Aç</span>
                       </>
                     )}
                   </button>
