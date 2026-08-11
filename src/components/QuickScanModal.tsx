@@ -182,15 +182,7 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
       }
 
       const config = {
-        fps: 25,
-        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          const w = Math.min(viewfinderWidth - 4, Math.floor(viewfinderWidth * 0.98));
-          const h = Math.min(viewfinderHeight - 4, Math.floor(viewfinderHeight * 0.80));
-          return {
-            width: Math.max(w, 240),
-            height: Math.max(h, 140),
-          };
-        },
+        fps: 15,
         disableFlip: false,
       };
 
@@ -236,18 +228,16 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
 
       let scanner = new Html5Qrcode('qr-reader-container', {
         formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.UPC_A,
           Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.UPC_E,
           Html5QrcodeSupportedFormats.CODE_93,
           Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.UPC_E,
           Html5QrcodeSupportedFormats.CODABAR,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-          Html5QrcodeSupportedFormats.AZTEC,
         ],
         verbose: false,
       });
@@ -728,22 +718,51 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
           {inputSource === 'CAMERA' && (
             <div className="bg-gray-900 rounded-xl p-4 mb-4 text-white flex flex-col items-center">
               <style>{`
+                #qr-reader-container {
+                  position: relative !important;
+                  width: 100% !important;
+                }
                 #qr-reader-container video {
                   width: 100% !important;
-                  height: auto !important;
+                  height: 100% !important;
                   max-height: 280px;
                   object-fit: cover !important;
                   border-radius: 0.5rem;
                 }
-                #qr-reader-container img[alt="Info icon"] {
+                #qr-reader-container canvas {
                   display: none !important;
+                }
+                #qr-reader-container img[alt="Info icon"], #qr-reader-container img {
+                  display: none !important;
+                }
+                @keyframes scanLineMove {
+                  0% { top: 10%; }
+                  50% { top: 85%; }
+                  100% { top: 10%; }
+                }
+                .laser-line {
+                  animation: scanLineMove 2s ease-in-out infinite;
                 }
               `}</style>
 
-              <div
-                id="qr-reader-container"
-                className="w-full max-w-sm rounded-lg overflow-hidden bg-black min-h-[240px] flex items-center justify-center border border-gray-700 relative"
-              />
+              <div className="relative w-full max-w-sm rounded-lg overflow-hidden bg-black min-h-[250px] flex items-center justify-center border border-gray-700">
+                <div id="qr-reader-container" className="w-full h-full" />
+
+                {isCameraActive && (
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4">
+                    {/* Visual Target Area */}
+                    <div className="w-full h-40 border-2 border-amber-400/80 rounded-xl relative shadow-[0_0_20px_rgba(245,158,11,0.25)] overflow-hidden">
+                      {/* Laser Line */}
+                      <div className="laser-line absolute left-0 right-0 h-0.5 bg-amber-400 shadow-[0_0_10px_#f59e0b]" />
+                      {/* Corner Accents */}
+                      <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-400" />
+                      <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-400" />
+                      <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-400" />
+                      <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-amber-400" />
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-between w-full mt-3 gap-2 flex-wrap">
                 <div className="flex items-center space-x-2">
