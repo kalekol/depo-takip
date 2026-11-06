@@ -53,7 +53,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       setName('');
       setSku(defaultSku);
       setNotes('');
-      const firstBarcode = initialBarcode || '8691000' + Math.floor(100000 + Math.random() * 900000);
+      const firstBarcode = initialBarcode || '';
       setPackages([
         {
           koliId: `pkg-1-${Date.now()}`,
@@ -66,14 +66,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
           koliId: `pkg-2-${Date.now()}`,
           koliIndex: 2,
           name: 'Koli 2/3',
-          barcode: '8691000' + Math.floor(100000 + Math.random() * 900000),
+          barcode: '',
           quantity: 0,
         },
         {
           koliId: `pkg-3-${Date.now()}`,
           koliIndex: 3,
           name: 'Koli 3/3',
-          barcode: '8691000' + Math.floor(100000 + Math.random() * 900000),
+          barcode: '',
           quantity: 0,
         },
       ]);
@@ -88,7 +88,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       koliId: `pkg-${nextIdx}-${Date.now()}`,
       koliIndex: nextIdx,
       name: `Koli ${nextIdx}/${nextIdx}`,
-      barcode: '8691000' + Math.floor(100000 + Math.random() * 900000),
+      barcode: '',
       quantity: 0,
     };
 
@@ -343,8 +343,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                         type="text"
                         value={pkg.barcode}
                         onChange={(e) => handlePackageChange(idx, 'barcode', e.target.value)}
-                        placeholder="869010..."
-                        className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-mono font-bold text-gray-800"
+                        placeholder="Barkod / Takip No (Opsiyonel)"
+                        className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-mono text-gray-800"
                       />
                     </div>
 
