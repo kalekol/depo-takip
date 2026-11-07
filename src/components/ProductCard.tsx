@@ -1,6 +1,7 @@
 import React from 'react';
 import { Product, PackageItem } from '../types';
 import { calculateCompleteSet } from '../lib/setCalculator';
+import { SwipeablePackageRow } from './SwipeablePackageRow';
 import {
   AlertTriangle,
   Barcode,
@@ -53,71 +54,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1">
           {product.packages.map((pkg) => {
             const isMissing = setStatus.missingPackagesToReachMax.some(
               (m) => m.koliIndex === pkg.koliIndex
             );
 
             return (
-              <div
+              <SwipeablePackageRow
                 key={pkg.koliId}
-                className={`p-3 rounded-xl border transition-all ${
-                  isMissing
-                    ? 'bg-rose-50/60 border-rose-200'
-                    : 'bg-gray-50/80 border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center space-x-2 min-w-0">
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 ${
-                        isMissing
-                          ? 'bg-rose-600 text-white'
-                          : 'bg-gray-900 text-amber-400'
-                      }`}
-                    >
-                      {pkg.koliIndex}/{product.packages.length}
-                    </span>
-                    <span className="text-xs font-semibold text-gray-900 truncate" title={pkg.name}>
-                      {pkg.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-1 flex-shrink-0">
-                    <button
-                      onClick={() => onQuickAdjust(product, pkg, -1)}
-                      disabled={pkg.quantity <= 0}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                      title="Bu koliye -1 stok düş"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="w-10 text-center font-bold text-sm text-gray-900">
-                      {pkg.quantity}
-                    </span>
-                    <button
-                      onClick={() => onQuickAdjust(product, pkg, 1)}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
-                      title="Bu koliye +1 stok ekle"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-200/60 font-mono">
-                  <div className="flex items-center space-x-1.5">
-                    <Barcode className="w-3.5 h-3.5 text-gray-400" />
-                    <span>{pkg.barcode}</span>
-                  </div>
-                  {isMissing && (
-                    <span className="text-rose-600 font-semibold text-[10px]">
-                      ⚠️ Eksik koli
-                    </span>
-                  )}
-                </div>
-              </div>
+                product={product}
+                pkg={pkg}
+                totalPackagesCount={product.packages.length}
+                isMissing={isMissing}
+                onQuickAdjust={onQuickAdjust}
+              />
             );
           })}
         </div>
@@ -261,10 +212,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
       {/* Koli Listesi -> Minimal ve net hiyerarşi */}
-      <div className="p-4 space-y-2 flex-1">
+      <div className="p-4 space-y-1 flex-1">
         <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1 flex items-center justify-between">
           <span>KOLİ STOKLARI ({product.packages.length} Koli)</span>
-          <span>Barkod</span>
+          <span className="text-[10px] text-gray-400 font-normal">👈 Sağa: +1 | Sola: -1 👉</span>
         </div>
 
         {product.packages.map((pkg) => {
@@ -273,61 +224,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           );
 
           return (
-            <div
+            <SwipeablePackageRow
               key={pkg.koliId}
-              className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 ${
-                isMissing
-                  ? 'bg-rose-50/50 border-rose-200'
-                  : 'bg-white border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              {/* Koli Adı ve Barkod */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center space-x-2">
-                  <span
-                    className={`text-[11px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
-                      isMissing ? 'bg-rose-600 text-white' : 'bg-gray-800 text-amber-300'
-                    }`}
-                  >
-                    {pkg.koliIndex}/{product.packages.length}
-                  </span>
-                  <span className="text-xs font-semibold text-gray-800 truncate" title={pkg.name}>
-                    {pkg.name}
-                  </span>
-                  {isMissing && (
-                    <span className="text-[10px] font-bold text-rose-600 bg-rose-100/80 px-1.5 py-0.5 rounded flex-shrink-0">
-                      Eksik
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center space-x-1 text-[11px] text-gray-400 font-mono mt-0.5 pl-0.5">
-                  <Barcode className="w-3 h-3" />
-                  <span>{pkg.barcode}</span>
-                </div>
-              </div>
-
-              {/* Hızlı -/+ Stok Kontrolü */}
-              <div className="flex items-center space-x-1 flex-shrink-0">
-                <button
-                  onClick={() => onQuickAdjust(product, pkg, -1)}
-                  disabled={pkg.quantity <= 0}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
-                  title="-1 Stok Düş"
-                >
-                  <Minus className="w-3 h-3" />
-                </button>
-                <span className="w-8 text-center font-bold text-xs text-gray-900">
-                  {pkg.quantity}
-                </span>
-                <button
-                  onClick={() => onQuickAdjust(product, pkg, 1)}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 transition"
-                  title="+1 Stok Ekle"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
+              product={product}
+              pkg={pkg}
+              totalPackagesCount={product.packages.length}
+              isMissing={isMissing}
+              onQuickAdjust={onQuickAdjust}
+            />
           );
         })}
       </div>

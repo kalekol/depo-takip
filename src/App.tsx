@@ -19,6 +19,7 @@ import { StockHistoryModal } from './components/StockHistoryModal';
 import { CategoryManagerModal } from './components/CategoryManagerModal';
 import { ExportModal } from './components/ExportModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
+import { StockTrendsChart } from './components/StockTrendsChart';
 import { syncToFirebase, stokDokumanRef } from './lib/firebase';
 import { onSnapshot } from 'firebase/firestore';
 import {
@@ -36,11 +37,13 @@ import {
   Package,
   Eye,
   FileSpreadsheet,
+  TrendingUp,
 } from 'lucide-react';
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [logs, setLogs] = useState<StockLogItem[]>([]);
+  const [showTrendsChart, setShowTrendsChart] = useState<boolean>(true);
 
   // Refs to avoid stale closures in Firestore snapshot callback
   const productsRef = useRef<Product[]>(products);
@@ -640,47 +643,69 @@ export default function App() {
                 )}
               </div>
 
-              {/* Segmented View Switcher */}
-              <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
+              {/* Segmented View Switcher & Stock Trends Toggle */}
+              <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => setViewMode('BOTH')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
-                    viewMode === 'BOTH'
-                      ? 'bg-white text-gray-900 shadow-sm font-black'
-                      : 'text-gray-500 hover:text-gray-800'
+                  onClick={() => setShowTrendsChart((prev) => !prev)}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border ${
+                    showTrendsChart
+                      ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-xs'
+                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                   }`}
+                  title="Stok Trend Grafiğini Aç / Kapat"
                 >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Detaylı</span>
+                  <TrendingUp className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Stok Trendleri</span>
                 </button>
 
-                <button
-                  onClick={() => setViewMode('PRODUCT_ONLY')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
-                    viewMode === 'PRODUCT_ONLY'
-                      ? 'bg-white text-gray-900 shadow-sm font-black'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Sadece Ürün</span>
-                </button>
+                <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
+                  <button
+                    onClick={() => setViewMode('BOTH')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                      viewMode === 'BOTH'
+                        ? 'bg-white text-gray-900 shadow-sm font-black'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Detaylı</span>
+                  </button>
 
-                <button
-                  onClick={() => setViewMode('PACKAGES_ONLY')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
-                    viewMode === 'PACKAGES_ONLY'
-                      ? 'bg-white text-gray-900 shadow-sm font-black'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  <Package className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Koli Listesi</span>
-                </button>
+                  <button
+                    onClick={() => setViewMode('PRODUCT_ONLY')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                      viewMode === 'PRODUCT_ONLY'
+                        ? 'bg-white text-gray-900 shadow-sm font-black'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Sadece Ürün</span>
+                  </button>
+
+                  <button
+                    onClick={() => setViewMode('PACKAGES_ONLY')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1 ${
+                      viewMode === 'PACKAGES_ONLY'
+                        ? 'bg-white text-gray-900 shadow-sm font-black'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Koli Listesi</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </section>
+
+        {/* 30-Day Recharts Stock Trends Chart */}
+        {showTrendsChart && (
+          <section aria-label="Son 30 Günlük Stok Trend Grafiği">
+            <StockTrendsChart products={products} logs={logs} />
+          </section>
+        )}
 
         {/* Product Cards Grid */}
         <section aria-label="Kayıtlı Mobilya Ürünleri ve Kolileri">

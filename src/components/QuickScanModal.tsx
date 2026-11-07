@@ -254,6 +254,10 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
     const success = await streamControlRef.current.toggleFlash(nextState);
     if (success) {
       setIsFlashOn(nextState);
+    } else {
+      setCameraError(
+        'Flaş (LED Işık) seçili kamerada desteklenmiyor. Lütfen telefonunuzun "Ana Arka Kamera"sını seçtiğinizden emin olun.'
+      );
     }
   };
 
@@ -657,18 +661,35 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                 />
 
                 {isCameraActive && (
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4">
-                    {/* Visual Target Area */}
-                    <div className="w-full h-40 border-2 border-amber-400/80 rounded-xl relative shadow-[0_0_20px_rgba(245,158,11,0.25)] overflow-hidden">
-                      {/* Laser Line */}
-                      <div className="laser-line absolute left-0 right-0 h-0.5 bg-amber-400 shadow-[0_0_10px_#f59e0b]" />
-                      {/* Corner Accents */}
-                      <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-400" />
-                      <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-400" />
-                      <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-400" />
-                      <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-amber-400" />
+                  <>
+                    {/* Floating Torch Flashlight Overlay Button on Live Video */}
+                    <button
+                      type="button"
+                      onClick={toggleFlashlight}
+                      className={`absolute top-2.5 right-2.5 z-20 px-2.5 py-1.5 rounded-xl text-xs font-black shadow-xl transition-all flex items-center space-x-1.5 active:scale-95 border ${
+                        isFlashOn
+                          ? 'bg-amber-400 text-gray-950 border-amber-300 ring-2 ring-amber-400/50 shadow-amber-500/50'
+                          : 'bg-black/70 hover:bg-black/90 text-amber-400 border-amber-500/50 backdrop-blur-md'
+                      }`}
+                      title="Flaş / Işık (LED) Aç veya Kapat"
+                    >
+                      {isFlashOn ? <ZapOff className="w-4 h-4 text-gray-950" /> : <Zap className="w-4 h-4 text-amber-400 animate-pulse" />}
+                      <span>{isFlashOn ? 'Flaş AÇIK' : 'Flaş Aç'}</span>
+                    </button>
+
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4">
+                      {/* Visual Target Area */}
+                      <div className="w-full h-40 border-2 border-amber-400/80 rounded-xl relative shadow-[0_0_20px_rgba(245,158,11,0.25)] overflow-hidden">
+                        {/* Laser Line */}
+                        <div className="laser-line absolute left-0 right-0 h-0.5 bg-amber-400 shadow-[0_0_10px_#f59e0b]" />
+                        {/* Corner Accents */}
+                        <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-400" />
+                        <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-400" />
+                        <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-400" />
+                        <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-amber-400" />
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
 
@@ -702,32 +723,33 @@ export const QuickScanModal: React.FC<QuickScanModalProps> = ({
                 </div>
 
                 <div className="flex items-center space-x-1.5 flex-wrap gap-y-1.5">
+                  {/* Flaş / LED Işık Butonu */}
+                  {isCameraActive && (
+                    <button
+                      type="button"
+                      onClick={toggleFlashlight}
+                      className={`px-3 py-2 rounded-lg text-xs font-bold border transition flex items-center space-x-1.5 min-h-[44px] ${
+                        isFlashOn
+                          ? 'bg-amber-400 text-gray-950 border-amber-300 shadow-md ring-2 ring-amber-400/40'
+                          : 'bg-gray-800 text-amber-400 border-gray-700 hover:bg-gray-700'
+                      }`}
+                      title="Karanlık depo ortamında kameranın LED ışığını (flaş) yakıp söndürür"
+                    >
+                      {isFlashOn ? <ZapOff className="w-4 h-4" /> : <Zap className="w-4 h-4 fill-amber-400" />}
+                      <span>{isFlashOn ? 'Flaş Kapat' : 'Flaş / Işık Aç'}</span>
+                    </button>
+                  )}
+
                   {/* Kamerayı Çevir (Ön / Arka Değiştir) */}
                   <button
                     type="button"
                     onClick={handleSwitchCamera}
-                    className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-gray-950 font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1"
+                    className="px-2.5 py-2 bg-amber-500 hover:bg-amber-400 text-gray-950 font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1 min-h-[44px]"
                     title="Ön ve Arka Kamerayı Değiştir"
                   >
                     <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
                     <span>Kamerayı Çevir</span>
                   </button>
-
-                  {hasFlash && isCameraActive && (
-                    <button
-                      type="button"
-                      onClick={toggleFlashlight}
-                      className={`p-1.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1 ${
-                        isFlashOn
-                          ? 'bg-amber-400 text-gray-900 border-amber-300 font-bold'
-                          : 'bg-gray-800 text-amber-400 border-gray-700 hover:bg-gray-700'
-                      }`}
-                      title="Flaş / Işık Aç/Kapat"
-                    >
-                      {isFlashOn ? <ZapOff className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5" />}
-                      <span>{isFlashOn ? 'Flaş Kapat' : 'Flaş Aç'}</span>
-                    </button>
-                  )}
 
                   <label className="cursor-pointer px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center space-x-1 shadow-sm" title="Telefonun kendi kamerasıyla net fotoğraf çekip anında oku">
                     <Camera className="w-3.5 h-3.5" />
